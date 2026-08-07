@@ -15,6 +15,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { appendFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
@@ -133,6 +134,12 @@ function querySqlite(
 }
 
 // ---------------------------------------------------------------------------
+// Prior context cache (per session — queried once, reused every turn)
+// ---------------------------------------------------------------------------
+
+const priorContextCache = new Map<string, string>();
+
+// ---------------------------------------------------------------------------
 // Prior context query
 // ---------------------------------------------------------------------------
 
@@ -168,6 +175,24 @@ LIMIT 50`;
   return contents.length > 0 ? contents.join(" | ") : null;
 }
 
+/** Rough token count: chars ÷ 4, rounded up. */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Cached wrapper — queries the DB once per session, reuses result on
+ * subsequent `before_agent_start` turns.
+ */
+function getPriorContext(cwd: string, sessionId: string): string {
+  if (priorContextCache.has(sessionId)) {
+    return priorContextCache.get(sessionId)!;
+  }
+  const result = queryPriorContext(cwd, sessionId) ?? "";
+  priorContextCache.set(sessionId, result);
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Extension
 // ---------------------------------------------------------------------------
@@ -195,6 +220,19 @@ export default function (pi: ExtensionAPI) {
       cwd: ctx.cwd,
     });
 
+    // Prime the prior-context cache and surface count above the status bar
+    const priorText = getPriorContext(ctx.cwd, sessionId);
+    const priorCount = priorText ? priorText.split("|").length : 0;
+    if (priorCount > 0) {
+      const tok = estimateTokens(priorText);
+      const label = `cavemem: ${priorCount} prior session(s) (~${tok} tok)`;
+      ctx.ui.setWidget(
+        "cavemem-status",
+        (_tui, theme) => new Text(theme.fg("dim", label), 0, 0),
+        { placement: "belowEditor" },
+      );
+    }
+
     log(`session_start: ${sessionId} (cwd: ${ctx.cwd})`);
   });
 
@@ -207,6 +245,8 @@ export default function (pi: ExtensionAPI) {
 
     fireHook("session-end", { session_id: sessionId });
     activeSessions.delete(sessionId);
+    priorContextCache.delete(sessionId);
+    ctx.ui.setWidget("cavemem-status", undefined);
     log(`session_shutdown: ${sessionId}`);
   });
 
@@ -340,11 +380,13 @@ export default function (pi: ExtensionAPI) {
       "Use these tools to recall context from prior sessions, especially " +
       "when resuming work on this project.";
 
-    // 2. Query prior session context
+    // 2. Prior session context (cached — DB queried once per session)
     let priorContext = "";
-    const prior = queryPriorContext(ctx.cwd, sessionId);
+    const prior = getPriorContext(ctx.cwd, sessionId);
     if (prior) {
-      priorContext = `\n\n## Prior Session Context (internal)\n${prior}`;
+      const tok = estimateTokens(prior);
+      priorContext =
+        `\n\n## Prior Session Context (internal, ~${tok} tok)\n${prior}`;
     }
 
     // 3. Append to system prompt

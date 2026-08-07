@@ -8,7 +8,9 @@ install-when-finish: true
 
 **Main prompt:**
 
-Create a Pi extension based on this OpenCode plugin @~/**/cavemem/apps/cli/dist/opencodeBridge.js
+Create a Pi extension based on this OpenCode plugin @Pi/extensions/src/cavemem/resources/opencodeBridge.js
+
+(Generated from cavemem/apps/cli — see resources/README.md for the build process.)
 
 **The extension will:**
 
@@ -47,7 +49,9 @@ Create a Pi extension based on this OpenCode plugin @~/**/cavemem/apps/cli/dist/
 - Extension hooks: session_start, session_shutdown, message_end (user prompts), tool_result (tool executions), agent_end (turn summaries), before_agent_start (system prompt enrichment)
 - Deduplication: activeSessions Set prevents duplicate session-start hooks for the same session file
 - Logging: to /tmp/cavemem-pi-extension.log via sync appendFileSync, silent on failure
-- Prior context query runs synchronously in before_agent_start (spawnSync with 3s timeout, 512KB buffer) — fast enough not to block the turn
+- Prior context queried once per session via a module-level Map cache keyed by sessionId — subsequent before_agent_start turns reuse the cached result; cache entry cleared on session_shutdown
+- Widget above status bar: on session_start, sets `ctx.ui.setWidget("cavemem-status", ..., { placement: "belowEditor" })` — renders on its own line above the token/cost status bar using `theme.fg("dim", ...)` to match the footer color; cleared on session_shutdown
+- Token estimate: simple `Math.ceil(text.length / 4)` used in both the widget and the injected context header for full disclosure
 
 **TS header documentation for extension:**
 
