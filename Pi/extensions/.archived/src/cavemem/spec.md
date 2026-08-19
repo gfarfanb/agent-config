@@ -1,6 +1,6 @@
 ---
 model: DeepSeek V4 Pro
-output: agent-config/Pi/extensions/cavemem.ts
+output: agent-config/Pi/extensions/build/cavemem.ts
 install-when-finish: true
 ---
 

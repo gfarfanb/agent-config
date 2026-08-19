@@ -1,6 +1,6 @@
 ---
 model: DeepSeek V4 Pro
-output: agent-config/Pi/extensions/codebase-memory-mcp.ts
+output: agent-config/Pi/extensions/build/codebase-memory-mcp.ts
 install-when-finish: true
 ---
 
